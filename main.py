@@ -1,4 +1,4 @@
-# Get Diver Data
+
 from concurrent.futures import ThreadPoolExecutor
 import requests
 import re
@@ -14,6 +14,7 @@ from execInfo import execution_info
 from statistics import mean, stdev
 import aiohttp
 import asyncio
+import time
 
 session = requests.Session()
 
@@ -26,7 +27,6 @@ async def get_dmeets_html(phpUrl, **kwargs):
                 return BeautifulSoup(text, "html.parser")
             else:
                 return None
-
 async def getDiverHrefs(diver_number):
     soup = await get_dmeets_html("profile.php", number=diver_number)
     profile_table_rows = soup.find("table", width="100%").find_all("tr")
@@ -60,27 +60,21 @@ def calculate_z_score(value, mean, std):
 def parseEventResults(diver_id, eventTable):
     soup = BeautifulSoup(eventTable, "html.parser")
     diver_info = []
-
-    # Find all rows in the table
     rows = soup.find_all("tr")
     for row in rows:
-        # Find the diver number
         diver_number_tag = row.find("a", href=re.compile("profile.php\?number=\d+"))
         place_tag = row.find("td", text=re.compile("^\d+$"))
         score_tag = row.find("a", href=re.compile("divesheetresultsext.php"))
         if diver_number_tag and place_tag and score_tag:
             diver_number = re.search("number=(\d+)", diver_number_tag['href']).group(1)
             place = place_tag.text.strip()
-            score = float(score_tag.text.strip())  # Convert score to float for calculations
+            score = float(score_tag.text.strip())  
             diver_info.append((diver_number, place, score))
-
-    if len(diver_info) < 2:  # Check for insufficient data points
+    if len(diver_info) < 2:  
         return
-
-    scores = [row[2] for row in diver_info]  # Extract scores from diver_info
+    scores = [row[2] for row in diver_info]  
     scores_mean = round(mean(scores), 2)
     scores_std = round(stdev(scores), 2)
-
     event_competitors_count = len(diver_info)
     for row in diver_info:
         if row[0] == diver_id:
@@ -89,16 +83,13 @@ def parseEventResults(diver_id, eventTable):
             z_score = round(calculate_z_score(score, scores_mean, scores_std), 2)
             diver_row = (place, event_competitors_count, score, z_score, scores_mean, scores_std)
             return diver_row
-    
     return
-
 
 async def getEventPage(diver_id, eventHref):
     modified_url = eventHref.replace("divesheetresultsext.php", "eventresultsext.php")
     modified_url = re.sub(r"(dvrnum=\d+&)|(sts=\d+&?)", "", modified_url).rstrip("&")
     event_results = await get_dmeets_html(modified_url)
     event_table_string = str(event_results.find("table", border="0", width="100%"))
-
     eventData_date = parseDateFromEventTable(event_table_string)
     eventData_board = parseBoardLevel(event_table_string)
     eventData_results = parseEventResults(diver_id, event_table_string)
@@ -109,7 +100,6 @@ async def getEventPage(diver_id, eventHref):
         eventData_z_score = eventData_results[3]
         eventData_mean = eventData_results[4]
         eventData_std = eventData_results[5]
-        
         eventData_combined = {
             "Date": eventData_date,
             "Board": eventData_board,
@@ -127,24 +117,16 @@ async def main(diverName):
     diver_number = get_diver_number(diverName)
     profile_event_hrefs = await getDiverHrefs(diver_number)
     tasks = [getEventPage(diver_number, href) for href in profile_event_hrefs]
-    
     event_data = await asyncio.gather(*tasks)
-    # Filter out None results and proceed with your data processing
     event_data = [data for data in event_data if data is not None]
-
-    # Convert event_data to DataFrame and save as before
     df = pd.DataFrame(event_data)
     df.insert(0, "Diver", diverName)
     df.to_csv(f'csv/{diverName.replace(" ", "_")}.csv', index=False)
-
-import time
 
 if __name__ == "__main__":
     diver_name = "Max Valasek"
     start_time = time.time()
     asyncio.run(main(diver_name))
     print(f"{diver_name} took {time.time() - start_time} seconds")
-
-
 
 
