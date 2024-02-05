@@ -4,13 +4,11 @@ import requests
 import re
 from bs4 import BeautifulSoup
 import pandas as pd
-import os
 import numpy as np
-from get_dnum import get_diver_number
+from py_helpers.get_diver_number import get_diver_number
 import re
 from datetime import datetime
 import re
-from execInfo import execution_info
 from statistics import mean, stdev
 import aiohttp
 import asyncio
