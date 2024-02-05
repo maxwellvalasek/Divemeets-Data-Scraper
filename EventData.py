@@ -5,7 +5,7 @@ import re
 from bs4 import BeautifulSoup
 import pandas as pd
 import numpy as np
-from py_helpers.get_diver_number import get_diver_number
+from get_diver_number import get_diver_number
 import re
 from datetime import datetime
 import re
@@ -13,6 +13,7 @@ from statistics import mean, stdev
 import aiohttp
 import asyncio
 import time
+import sys
 
 session = requests.Session()
 
@@ -119,10 +120,14 @@ async def main(diverName):
     event_data = [data for data in event_data if data is not None]
     df = pd.DataFrame(event_data)
     df.insert(0, "Diver", diverName)
-    df.to_csv(f'csv/{diverName.replace(" ", "_")}.csv', index=False)
+    df.to_csv(f'diver_csvs/{diverName.replace(" ", "_")}.csv', index=False)
 
 if __name__ == "__main__":
-    diver_name = "Max Valasek"
+    if len(sys.argv) < 2:
+        print("Please provide the diver name as a command-line argument.")
+        sys.exit(1)
+    
+    diver_name = sys.argv[1]
     start_time = time.time()
     asyncio.run(main(diver_name))
     print(f"{diver_name} took {time.time() - start_time} seconds")
