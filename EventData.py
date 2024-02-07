@@ -1,36 +1,37 @@
-
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 import re
 from bs4 import BeautifulSoup
 import pandas as pd
-import numpy as np
 from get_diver_number import get_diver_number
-import re
 from datetime import datetime
-import re
 from statistics import mean, stdev
-import aiohttp
-import asyncio
 import time
-import sys
 
 session = requests.Session()
 
-async def get_dmeets_html(phpUrl, **kwargs):
+def get_dmeets_html(phpUrl, **kwargs):
     url = "https://secure.meetcontrol.com/divemeets/system/" + phpUrl
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, params=kwargs) as response:
-            if response.status == 200:
-                text = await response.text()
-                return BeautifulSoup(text, "html.parser")
-            else:
-                return None
-async def getDiverHrefs(diver_number):
-    soup = await get_dmeets_html("profile.php", number=diver_number)
+    response = session.get(url, params=kwargs)
+    if response.status_code == 200:
+        text = response.text
+        return BeautifulSoup(text, "html.parser")
+    else:
+        return None
+
+def getDiverHrefs(diver_number):
+    soup = get_dmeets_html("profile.php", number=diver_number)
     profile_table_rows = soup.find("table", width="100%").find_all("tr")
     profile_event_hrefs = [link.get('href') for row in profile_table_rows for link in row.find_all("a") if link.get('href')]
     return profile_event_hrefs
+
+def parseMeetName(eventTable):
+    meet_match = re.search(r"Meet:\s*<strong><a href=\"[^\"]+\">([^<]+)</a></strong>", eventTable)
+    if meet_match:
+        meet_name = meet_match.group(1)
+        return meet_name
+    else:
+        return "Meet name not found"
 
 def parseDateFromEventTable(eventTable):
     date_match = re.search(r"Date:\s*<strong>([a-zA-Z]{3} \d{1,2}, \d{4})", eventTable)
@@ -40,8 +41,8 @@ def parseDateFromEventTable(eventTable):
         formatted_date = date_obj.strftime("%m-%d-%Y")
         return formatted_date
     else:
-        return("Date not found")
-    
+        return "Date not found"
+
 def parseBoardLevel(eventTable):
     soup = BeautifulSoup(eventTable, "html.parser")
     rows = soup.find_all("tr")
@@ -67,11 +68,11 @@ def parseEventResults(diver_id, eventTable):
         if diver_number_tag and place_tag and score_tag:
             diver_number = re.search("number=(\d+)", diver_number_tag['href']).group(1)
             place = place_tag.text.strip()
-            score = float(score_tag.text.strip())  
+            score = float(score_tag.text.strip())
             diver_info.append((diver_number, place, score))
-    if len(diver_info) < 2:  
+    if len(diver_info) < 2:
         return
-    scores = [row[2] for row in diver_info]  
+    scores = [row[2] for row in diver_info]
     scores_mean = round(mean(scores), 2)
     scores_std = round(stdev(scores), 2)
     event_competitors_count = len(diver_info)
@@ -84,11 +85,12 @@ def parseEventResults(diver_id, eventTable):
             return diver_row
     return
 
-async def getEventPage(diver_id, eventHref):
+def getEventPage(diver_id, eventHref):
     modified_url = eventHref.replace("divesheetresultsext.php", "eventresultsext.php")
     modified_url = re.sub(r"(dvrnum=\d+&)|(sts=\d+&?)", "", modified_url).rstrip("&")
-    event_results = await get_dmeets_html(modified_url)
+    event_results = get_dmeets_html(modified_url)
     event_table_string = str(event_results.find("table", border="0", width="100%"))
+    eventData_meetName = parseMeetName(event_table_string)
     eventData_date = parseDateFromEventTable(event_table_string)
     eventData_board = parseBoardLevel(event_table_string)
     eventData_results = parseEventResults(diver_id, event_table_string)
@@ -101,6 +103,7 @@ async def getEventPage(diver_id, eventHref):
         eventData_std = eventData_results[5]
         eventData_combined = {
             "Date": eventData_date,
+            "Meet Name": eventData_meetName,
             "Board": eventData_board,
             "Place": eventData_place,
             "Competitors Count": eventData_count_competitors,
@@ -110,26 +113,38 @@ async def getEventPage(diver_id, eventHref):
             "Standard Deviation": eventData_std
         }
         return eventData_combined
-    else: return
-    
-async def main(diverName):
+    else:
+        return
+
+def process_event_page(diver_number, href):
+    event_page_data = getEventPage(diver_number, href)
+    if event_page_data is not None:
+        return event_page_data
+
+def main(diverName):
     diver_number = get_diver_number(diverName)
-    profile_event_hrefs = await getDiverHrefs(diver_number)
-    tasks = [getEventPage(diver_number, href) for href in profile_event_hrefs]
-    event_data = await asyncio.gather(*tasks)
+    profile_event_hrefs = getDiverHrefs(diver_number)
+    event_data = []
+    
+    with ThreadPoolExecutor() as executor:
+        futures = [executor.submit(process_event_page, diver_number, href) for href in profile_event_hrefs]
+        for future in as_completed(futures):
+            event_page_data = future.result()
+            if event_page_data is not None:
+                event_data.append(event_page_data)
+    
     event_data = [data for data in event_data if data is not None]
     df = pd.DataFrame(event_data)
     df.insert(0, "Diver", diverName)
     df.to_csv(f'diver_csvs/{diverName.replace(" ", "_")}.csv', index=False)
 
+import sys
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Please provide the diver name as a command-line argument.")
+        print("Please provide the diver name as a command line argument.")
         sys.exit(1)
     
     diver_name = sys.argv[1]
     start_time = time.time()
-    asyncio.run(main(diver_name))
+    main(diver_name)
     print(f"{diver_name} took {time.time() - start_time} seconds")
-
-
