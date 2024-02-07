@@ -16,6 +16,7 @@ Valid diver names can be found on the [divemeets website](https://secure.meetcon
 | Diver      | Date       | Meet Name                               | Board                    | Place | Competitors Count | Final Score | Z-Score | Mean  | Standard Deviation |
 |------------|------------|-----------------------------------------|--------------------------|-------|-------------------|-------------|---------|-------|-------------------|
 | Conrad Eck | 06-16-2022 | 2022 USA Diving Zone E Championships   | 16-18 Boys Platform J.O  | 5     | 23                | 440.95      | 0.84    | 372.55| 81.5              |
+
 *Example row from Conrad_Eck.csv*
 
 ### Merge CSV Data: `python merge_csv_data.py`
