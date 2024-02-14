@@ -1,6 +1,8 @@
 ﻿# Divemeets Data Scraper
 Retrive and calculate competition performances from [www.divemeets.com](https://secure.meetcontrol.com/divemeets/system/index.php) for an individual diver. 
 
+https://public.tableau.com/app/profile/maxval7237/viz/DivingMetrics/DivesCompeted
+
 ## Installation
 Install the required packages:
     `pip install -r requirements.txt`
